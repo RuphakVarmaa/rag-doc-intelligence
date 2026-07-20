@@ -1,9 +1,6 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ["pdfjs-dist"],
-  },
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  serverExternalPackages: ["pdfjs-dist"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "avatars.githubusercontent.com" },

@@ -13,7 +13,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "next": "14.2.5",
+    "next": "14.2.30",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "next-auth": "^4.24.7",
@@ -45,7 +45,7 @@
     "@types/react-dom": "^18.3.0",
     "typescript": "^5.5.4",
     "eslint": "^8.57.0",
-    "eslint-config-next": "14.2.5",
+    "eslint-config-next": "14.2.30",
     "@typescript-eslint/eslint-plugin": "^7.17.0",
     "@typescript-eslint/parser": "^7.17.0",
     "vitest": "^2.0.4",
