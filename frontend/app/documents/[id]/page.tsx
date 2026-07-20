@@ -85,7 +85,7 @@ export default function DocumentViewerPage() {
     // Ensure this document is selected for chat
     if (!selectedIds.has(id)) {
       toggleSelect(id);
-      setSelectedDocumentIds([...selectedIds, id]);
+      setSelectedDocumentIds([...Array.from(selectedIds), id]);
     }
 
     setPendingQuestion(question);
