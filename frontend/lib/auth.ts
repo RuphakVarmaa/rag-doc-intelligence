@@ -1,6 +1,7 @@
 import GithubProvider from "next-auth/providers/github";
 import EmailProvider from "next-auth/providers/email";
 import type { NextAuthOptions } from "next-auth";
+import type { JWT } from "next-auth/jwt";
 import { SignJWT, jwtVerify } from "jose";
 
 function getSecret(): Uint8Array {
@@ -33,7 +34,7 @@ export const authOptions: NextAuthOptions = {
   jwt: {
     async encode({ token, maxAge }) {
       const secret = getSecret();
-      return new SignJWT(token as Record<string, unknown>)
+      return new SignJWT(token as JWT)
         .setProtectedHeader({ alg: "HS256" })
         .setIssuedAt()
         .setExpirationTime(Math.floor(Date.now() / 1000) + (maxAge ?? 30 * 24 * 60 * 60))
@@ -44,7 +45,7 @@ export const authOptions: NextAuthOptions = {
       const secret = getSecret();
       try {
         const { payload } = await jwtVerify(token, secret, { algorithms: ["HS256"] });
-        return payload as Record<string, unknown>;
+        return payload as JWT;
       } catch {
         return null;
       }
