@@ -91,7 +91,7 @@ export default function DocumentViewerPage() {
     setPendingQuestion(question);
     setContextMenu(null);
     router.push("/dashboard");
-  }, [contextMenu, id, selectedIds, toggleSelect, setSelectedDocumentIds, setInput, router]);
+  }, [contextMenu, id, selectedIds, toggleSelect, setSelectedDocumentIds, setPendingQuestion, router]);
 
   useEffect(() => {
     const dismiss = () => setContextMenu(null);
