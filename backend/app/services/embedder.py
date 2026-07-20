@@ -1,8 +1,9 @@
 import uuid
+import json
 import asyncio
+import boto3
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from openai import AsyncOpenAI
 import structlog
 
 from app.models.chunk import Chunk
@@ -10,27 +11,50 @@ from app.config import get_settings
 
 log = structlog.get_logger()
 settings = get_settings()
-_client: AsyncOpenAI | None = None
+
+_bedrock: boto3.client | None = None
 
 
-def get_openai_client() -> AsyncOpenAI:
-    global _client
-    if _client is None:
-        _client = AsyncOpenAI(api_key=settings.openai_api_key)
-    return _client
+def get_bedrock_client():
+    global _bedrock
+    if _bedrock is None:
+        _bedrock = boto3.client(
+            "bedrock-runtime",
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            region_name=settings.aws_region,
+        )
+    return _bedrock
+
+
+def _embed_batch_sync(texts: list[str]) -> list[list[float]]:
+    client = get_bedrock_client()
+    results = []
+    for text in texts:
+        body = json.dumps({
+            "inputText": text[:8192],  # Titan V2 max input
+            "dimensions": settings.embedding_dimensions,
+            "normalize": True,
+        })
+        response = client.invoke_model(
+            modelId=settings.embedding_model,
+            body=body,
+            contentType="application/json",
+            accept="application/json",
+        )
+        results.append(json.loads(response["body"].read())["embedding"])
+    return results
 
 
 async def embed_texts(texts: list[str]) -> list[list[float]]:
-    client = get_openai_client()
-    BATCH = 100
+    """Embed a list of texts via Amazon Titan Text V2 on Bedrock."""
+    BATCH = 20  # stay well within Bedrock rate limits
     all_embeddings: list[list[float]] = []
+    loop = asyncio.get_event_loop()
     for i in range(0, len(texts), BATCH):
         batch = texts[i : i + BATCH]
-        response = await client.embeddings.create(
-            model=settings.embedding_model,
-            input=batch,
-        )
-        all_embeddings.extend([e.embedding for e in response.data])
+        embeddings = await loop.run_in_executor(None, _embed_batch_sync, batch)
+        all_embeddings.extend(embeddings)
     return all_embeddings
 
 

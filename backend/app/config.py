@@ -8,19 +8,20 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://postgres:password@localhost:5432/ragdocs"
 
-    # OpenAI
-    openai_api_key: str = ""
-    embedding_model: str = "text-embedding-3-small"
-    chat_model: str = "gpt-4o"
-
     # Auth
     nextauth_secret: str = ""
 
-    # AWS S3
-    storage_bucket: str = ""
+    # AWS (Bedrock + S3 — shared credentials)
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
     aws_region: str = "us-east-1"
+    storage_bucket: str = ""
+
+    # Bedrock model IDs (inference profiles)
+    embedding_model: str = "amazon.titan-embed-text-v2:0"
+    chat_model: str = "us.anthropic.claude-sonnet-4-6-20250514-v1:0"
+    classify_model: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    embedding_dimensions: int = 1024
 
     # Redis
     redis_url: str = "redis://localhost:6379"

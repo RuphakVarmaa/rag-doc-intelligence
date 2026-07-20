@@ -24,7 +24,7 @@ class Chunk(Base):
     section_heading: Mapped[str | None] = mapped_column(Text)
     char_offset_start: Mapped[int | None] = mapped_column(Integer)
     char_offset_end: Mapped[int | None] = mapped_column(Integer)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     document: Mapped["Document"] = relationship(back_populates="chunks")  # type: ignore[name-defined]

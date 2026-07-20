@@ -56,7 +56,7 @@ def upgrade() -> None:
         sa.Column("embedding", sa.Column("embedding", sa.Text())),  # placeholder, pgvector handles type
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
-    op.execute("ALTER TABLE chunks ALTER COLUMN embedding TYPE vector(1536) USING NULL::vector(1536)")
+    op.execute("ALTER TABLE chunks ALTER COLUMN embedding TYPE vector(1024) USING NULL::vector(1024)")
     op.create_index("ix_chunks_document_id", "chunks", ["document_id"])
     op.execute(
         "CREATE INDEX ON chunks USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)"
