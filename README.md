@@ -2,7 +2,8 @@
 
 > AI-powered document Q&A with verifiable citations. Upload PDFs, DOCX, TXT, or Markdown — ask anything — every answer traces back to exact pages and paragraphs.
 
-**Live demo:** _deploy and add URL here_
+**Live frontend:** https://frontend-nu-three-92.vercel.app
+**GitHub:** https://github.com/RuphakVarmaa/rag-doc-intelligence
 
 ---
 
@@ -14,15 +15,15 @@ graph TD
     V -->|SSE stream| B[Fly.io — FastAPI]
     B --> PG[(PostgreSQL + pgvector)]
     B --> R[(Redis)]
-    B --> OAI[OpenAI API]
+    B --> BED[AWS Bedrock]
     B --> S3[AWS S3]
 
     subgraph RAG Pipeline
         B --> CH[Chunker]
-        CH --> EMB[Embedder]
+        CH --> EMB[Embedder — Titan V2]
         EMB --> RET[Retriever — HNSW]
         RET --> RNK[Reranker — ms-marco]
-        RNK --> AGT[Multi-Agent — GPT-4o]
+        RNK --> AGT[Agent — Claude Sonnet 4.6]
         AGT --> CIT[Citation Extractor]
     end
 ```
@@ -33,16 +34,27 @@ graph TD
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 14 App Router, TypeScript, Tailwind CSS, shadcn/ui |
+| Frontend | Next.js 14 App Router, TypeScript, Tailwind CSS |
 | State | Zustand + TanStack Query v5 |
-| Auth | NextAuth.js (GitHub OAuth + magic link) |
+| Auth | NextAuth.js (GitHub OAuth + magic link), HS256 JWT bridge |
 | Backend | FastAPI, Python 3.11, asyncio |
-| Database | PostgreSQL 16 + pgvector (HNSW index) |
-| Embeddings | OpenAI text-embedding-3-small (1536-dim) |
-| LLM | GPT-4o with structured citation markers |
+| Database | PostgreSQL 16 + pgvector (HNSW index, 1024-dim) |
+| Embeddings | Amazon Titan Text V2 via AWS Bedrock |
+| LLM | Claude Sonnet 4.6 (chat) + Claude Haiku 4.5 (query routing) |
 | Reranker | ms-marco-MiniLM-L-6-v2 cross-encoder |
 | Deploy | Vercel (frontend) + Fly.io (backend) |
 | CI/CD | GitHub Actions |
+
+---
+
+## Live Links
+
+| Service | URL |
+|---|---|
+| Frontend (Vercel) | https://frontend-nu-three-92.vercel.app |
+| GitHub repo | https://github.com/RuphakVarmaa/rag-doc-intelligence |
+| Vercel dashboard | https://vercel.com/ruphakvarmaas-projects/frontend |
+| Backend (Fly.io) | https://rag-doc-backend.fly.dev _(deploy with `flyctl deploy`)_ |
 
 ---
 
@@ -56,7 +68,7 @@ graph TD
 git clone https://github.com/RuphakVarmaa/rag-doc-intelligence
 cd rag-doc-intelligence
 cp .env.example .env
-# Fill in: OPENAI_API_KEY, GITHUB_CLIENT_ID/SECRET, NEXTAUTH_SECRET, RESEND_API_KEY
+# Fill in: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, GITHUB_CLIENT_ID/SECRET, NEXTAUTH_SECRET
 ```
 
 ### 2. Start infrastructure
@@ -91,16 +103,15 @@ npm run dev
 | Variable | Description |
 |---|---|
 | `DATABASE_URL` | PostgreSQL connection string (asyncpg) |
-| `OPENAI_API_KEY` | OpenAI API key for embeddings + chat |
-| `NEXTAUTH_SECRET` | Random secret for NextAuth (`openssl rand -base64 32`) |
+| `AWS_ACCESS_KEY_ID` | AWS access key (Bedrock + S3) |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key |
+| `AWS_REGION` | AWS region (default: `us-east-1`) |
+| `STORAGE_BUCKET` | AWS S3 bucket name for file storage |
+| `NEXTAUTH_SECRET` | Random secret (`openssl rand -base64 32`) |
 | `NEXTAUTH_URL` | Public URL of the frontend |
 | `GITHUB_CLIENT_ID` | GitHub OAuth App client ID |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret |
 | `RESEND_API_KEY` | Resend API key for magic link emails |
-| `STORAGE_BUCKET` | AWS S3 bucket name |
-| `AWS_ACCESS_KEY_ID` | AWS access key |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret key |
-| `AWS_REGION` | AWS region (default: us-east-1) |
 | `SENTRY_DSN` | Sentry DSN for error tracking |
 | `BACKEND_URL` | Backend service URL |
 
@@ -111,8 +122,10 @@ npm run dev
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/documents/upload` | Upload document (multipart) |
-| `GET` | `/api/documents/{id}/status` | SSE stream: processing status |
 | `GET` | `/api/documents` | List all documents |
+| `GET` | `/api/documents/{id}` | Get document metadata + file URL |
+| `GET` | `/api/documents/{id}/status` | SSE stream: processing status |
+| `GET` | `/api/documents/{id}/file` | Serve raw file bytes (or S3 redirect) |
 | `DELETE` | `/api/documents/{id}` | Soft-delete document |
 | `POST` | `/api/chat/stream` | SSE stream: RAG chat response |
 | `GET` | `/api/chat/sessions` | List chat sessions |
@@ -130,7 +143,11 @@ npm run dev
 cd backend
 flyctl auth login
 flyctl launch --name rag-doc-backend
-flyctl secrets set OPENAI_API_KEY=... DATABASE_URL=... NEXTAUTH_SECRET=...
+flyctl secrets set \
+  AWS_ACCESS_KEY_ID=... \
+  AWS_SECRET_ACCESS_KEY=... \
+  DATABASE_URL=... \
+  NEXTAUTH_SECRET=...
 flyctl deploy
 ```
 
@@ -138,7 +155,7 @@ flyctl deploy
 ```bash
 cd frontend
 npx vercel --prod
-# Set env vars in Vercel dashboard
+# Set env vars in Vercel dashboard → Settings → Environment Variables
 ```
 
 ### GitHub Actions Secrets Required
@@ -174,24 +191,28 @@ npx playwright test
 rag-doc-intelligence/
 ├── frontend/                  # Next.js 14 App Router
 │   ├── app/                   # Pages and layouts
-│   ├── components/            # UI components
-│   │   ├── chat/              # Chat panel, bubbles
-│   │   ├── citations/         # Citations panel
-│   │   ├── documents/         # Document sidebar
-│   │   └── ui/                # Shared primitives
-│   ├── store/                 # Zustand stores
-│   └── hooks/                 # Custom React hooks
+│   │   ├── dashboard/         # Main chat + document interface
+│   │   ├── upload/            # Drag-and-drop upload with SSE progress
+│   │   ├── documents/[id]/    # PDF viewer with right-click "Ask about this"
+│   │   └── auth/              # Sign-in and error pages
+│   ├── components/
+│   │   ├── chat/              # ChatPanel, ChatBubble (streaming)
+│   │   ├── citations/         # Citations panel with confidence badges
+│   │   ├── documents/         # Document sidebar with status indicators
+│   │   └── error/             # ErrorBoundary
+│   ├── store/                 # Zustand (chat, document, ui state)
+│   └── lib/                   # API client (HS256 JWT injection), auth config
 ├── backend/                   # FastAPI service
 │   └── app/
-│       ├── routers/           # HTTP route handlers
-│       ├── services/          # Business logic (RAG pipeline)
-│       ├── models/            # SQLAlchemy ORM models
-│       └── db/migrations/     # Alembic migrations
-├── docker-compose.yml         # Local dev infrastructure
-├── .github/workflows/ci.yml   # CI/CD pipeline
+│       ├── routers/           # documents, chat, embeddings
+│       ├── services/          # chunker, embedder, retriever, reranker, agent, citation
+│       ├── models/            # SQLAlchemy ORM (Document, Chunk, ChatSession)
+│       └── db/migrations/     # Alembic (pgvector 1024-dim HNSW index)
+├── docker-compose.yml         # Local dev: pgvector + redis
+├── .github/workflows/ci.yml   # lint → typecheck → test → deploy
 └── docs/spec.md               # Full system specification
 ```
 
 ---
 
-Built by [Ruphak Varmaa S](https://ruphak.me)
+Built by [Ruphak Varmaa S](https://github.com/RuphakVarmaa)
